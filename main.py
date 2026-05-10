@@ -8,6 +8,8 @@ from datetime import date
 import datetime
 import sys
 import platform
+import os
+import subprocess
 
 from pdf_generator import generate_quote_pdf
 
@@ -83,6 +85,13 @@ class PreventivoApp:
             
             # Su Windows: prova ICO con iconbitmap()
             if platform.system() == "Windows":
+                try:
+                    import ctypes
+                    myappid = 'croceecuore.preventivatore.1.0'
+                    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+                except Exception:
+                    pass
+
                 ico_path = assets_dir / "icon.ico"
                 if ico_path.exists():
                     try:
@@ -313,18 +322,81 @@ class PreventivoApp:
         self.tree.heading("vat", text="C.Iva (%)")
         self.tree.heading("total_with_vat", text="Totale")
 
-        self.tree.column("name", width=300, anchor="w")
-        self.tree.column("unit_price", width=100, anchor="e")
-        self.tree.column("quantity", width=80, anchor="center")
-        self.tree.column("total", width=100, anchor="e")
-        self.tree.column("vat", width=80, anchor="center")
-        self.tree.column("total_with_vat", width=100, anchor="e")
+        self.tree.column("name", width=300, anchor="w", stretch=tk.YES)
+        self.tree.column("unit_price", width=100, anchor="e", stretch=tk.NO)
+        self.tree.column("quantity", width=80, anchor="center", stretch=tk.NO)
+        self.tree.column("total", width=100, anchor="e", stretch=tk.NO)
+        self.tree.column("vat", width=80, anchor="center", stretch=tk.NO)
+        self.tree.column("total_with_vat", width=100, anchor="e", stretch=tk.NO)
 
         yscroll = ttk.Scrollbar(frame, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=yscroll.set)
 
         self.tree.pack(side="left", fill="both", expand=True)
         yscroll.pack(side="right", fill="y")
+
+        self.tree.bind("<Double-1>", self._on_double_click_edit)
+
+
+    def _on_double_click_edit(self, event) -> None:
+        row_id = self.tree.identify_row(event.y)
+        column = self.tree.identify_column(event.x)
+        if not row_id or not column:
+            return
+
+        col_index = int(column[1:]) - 1
+        # Editable columns: 0 (name), 1 (unit_price), 2 (quantity), 4 (vat)
+        if col_index not in [0, 1, 2, 4]:
+            return
+
+        x, y, width, height = self.tree.bbox(row_id, column)
+
+        entry = ttk.Entry(self.tree)
+        entry.place(x=x, y=y, width=width, height=height)
+
+        old_val = self.tree.item(row_id, 'values')[col_index]
+        entry.insert(0, old_val)
+        entry.focus_set()
+
+        def save_edit(evt):
+            new_val = entry.get()
+            entry.destroy()
+            if new_val == old_val:
+                return
+
+            index = self.tree.index(row_id)
+            item = self.items[index]
+
+            try:
+                if col_index == 0:
+                    item["name"] = new_val
+                elif col_index == 1:
+                    item["unit_price"] = q(parse_decimal(new_val, "Prezzo cad."))
+                elif col_index == 2:
+                    item["quantity"] = q(parse_decimal(new_val, "Quantità"))
+                elif col_index == 4:
+                    item["vat_percent"] = q(parse_decimal(new_val.replace('%', ''), "IVA"))
+
+                # Recalculate
+                item["total"] = q(item["unit_price"] * item["quantity"])
+                item["total_with_vat"] = q(item["total"] + (item["total"] * item["vat_percent"] / Decimal("100")))
+
+                qty_str = f"{int(item['quantity'])}" if item['quantity'] % 1 == 0 else format_decimal(item['quantity'])
+
+                self.tree.item(row_id, values=(
+                    item["name"],
+                    format_decimal(item["unit_price"]),
+                    qty_str,
+                    format_decimal(item["total"]),
+                    format_decimal(item["vat_percent"]),
+                    format_decimal(item["total_with_vat"]),
+                ))
+                self._refresh_summary()
+            except ValueError as exc:
+                messagebox.showerror("Errore di validazione", str(exc))
+
+        entry.bind("<Return>", save_edit)
+        entry.bind("<FocusOut>", save_edit)
 
     def _build_buttons(self) -> None:
         # Questo frame è pacchettizzato BOTTOM, quindi starà sempre in fondo.
@@ -640,6 +712,17 @@ class PreventivoApp:
             storage.save_local_quote(payload, self.quote_number_var.get(), self.customer_name_var.get())
 
             messagebox.showinfo("Fatto!", f"PDF generato:\n{file_path}")
+            # PDF PREVIEW
+            try:
+                if platform.system() == "Windows":
+                    os.startfile(file_path)
+                elif platform.system() == "Darwin":
+                    subprocess.call(["open", file_path])
+                else:
+                    subprocess.call(["xdg-open", file_path])
+            except Exception as e:
+                print(f"Preview error: {e}")
+
         except Exception as exc:
             messagebox.showerror("Errore PDF", str(exc))
 
