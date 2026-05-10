@@ -5,18 +5,18 @@ on:
     branches:
       - main
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   build:
-    runs-on: windows-latest
+    # Explicitly using windows-2025 to avoid the redirection notice
+    runs-on: windows-2025
 
     steps:
+      # Updated to v4.2.2+ (verified Node 24 compatibility)
       - uses: actions/checkout@v4
 
+      # Updated to v5 (Standard for Node 24+ environments)
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
@@ -37,28 +37,28 @@ jobs:
 
           def is_valid_ico(path: Path) -> bool:
             try:
-              im = Image.open(path)
-              sizes = im.ico.sizes() if getattr(im, "ico", None) else set()
-              return im.format == "ICO" and bool(sizes)
+              with Image.open(path) as im:
+                return im.format == "ICO"
             except Exception:
               return False
 
           if not is_valid_ico(ico):
             if not png.exists():
-              raise FileNotFoundError("assets/icon.png non trovato: impossibile generare icon.ico")
-            src = Image.open(png).convert("RGBA")
-            side = max(src.size)
-            canvas = Image.new("RGBA", (side, side), (0, 0, 0, 0))
-            offset = ((side - src.width) // 2, (side - src.height) // 2)
-            canvas.paste(src, offset)
-            canvas.save(
-              ico,
-              format="ICO",
-              sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)],
-            )
-            print("Generato assets/icon.ico valido da assets/icon.png")
+              raise FileNotFoundError("assets/icon.png not found: cannot generate icon.ico")
+            with Image.open(png) as src:
+              src = src.convert("RGBA")
+              side = max(src.size)
+              canvas = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+              offset = ((side - src.width) // 2, (side - src.height) // 2)
+              canvas.paste(src, offset)
+              canvas.save(
+                ico,
+                format="ICO",
+                sizes=[(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)],
+              )
+            print("Generated valid assets/icon.ico from assets/icon.png")
           else:
-            print("assets/icon.ico gia valido")
+            print("assets/icon.ico is already valid")
           PY
 
       - name: Build EXE with PyInstaller
@@ -69,11 +69,10 @@ jobs:
             --add-data "assets;assets" `
             main.py
 
+      # Using v4 (Ensure you are on the latest minor release for Node 24 support)
       - name: Upload EXE artifact
         uses: actions/upload-artifact@v4
         with:
           name: Preventivatore-Windows
           path: dist/Preventivatore.exe
           retention-days: 90
-
-

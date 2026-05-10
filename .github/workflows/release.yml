@@ -8,18 +8,17 @@ on:
 permissions:
   contents: write
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   release:
-    runs-on: windows-latest
+    # Explicitly set to windows-2025 to avoid the "redirection" notice
+    runs-on: windows-2025
 
     steps:
       - uses: actions/checkout@v4
 
+      # Updated to v5 for Node 24 compatibility
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
@@ -40,28 +39,28 @@ jobs:
 
           def is_valid_ico(path: Path) -> bool:
             try:
-              im = Image.open(path)
-              sizes = im.ico.sizes() if getattr(im, "ico", None) else set()
-              return im.format == "ICO" and bool(sizes)
+              with Image.open(path) as im:
+                return im.format == "ICO"
             except Exception:
               return False
 
           if not is_valid_ico(ico):
             if not png.exists():
-              raise FileNotFoundError("assets/icon.png non trovato: impossibile generare icon.ico")
-            src = Image.open(png).convert("RGBA")
-            side = max(src.size)
-            canvas = Image.new("RGBA", (side, side), (0, 0, 0, 0))
-            offset = ((side - src.width) // 2, (side - src.height) // 2)
-            canvas.paste(src, offset)
-            canvas.save(
-              ico,
-              format="ICO",
-              sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)],
-            )
-            print("Generato assets/icon.ico valido da assets/icon.png")
+              raise FileNotFoundError("assets/icon.png not found")
+            with Image.open(png) as src:
+              src = src.convert("RGBA")
+              side = max(src.size)
+              canvas = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+              offset = ((side - src.width) // 2, (side - src.height) // 2)
+              canvas.paste(src, offset)
+              canvas.save(
+                ico,
+                format="ICO",
+                sizes=[(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)],
+              )
+            print("Generated assets/icon.ico")
           else:
-            print("assets/icon.ico gia valido")
+            print("assets/icon.ico already valid")
           PY
 
       - name: Build EXE with PyInstaller
@@ -72,8 +71,9 @@ jobs:
             --add-data "assets;assets" `
             main.py
 
+      # Updated to v2 to fix the Node 20 deprecation error
       - name: Create GitHub Release with Assets
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: dist/Preventivatore.exe
           draft: false
