@@ -231,7 +231,7 @@ class PreventivoApp:
         self.customer_address_var = tk.StringVar()
         self.contact_person_var = tk.StringVar()
         self.oggetto_var = tk.StringVar()
-        self.final_notes_var = tk.StringVar(value="Tutti gli oggetti sopra indicati saranno personalizzati.")
+        self.final_notes_var = tk.StringVar(value="")
 
         # Riga 1: N. Preventivo e Data
         ttk.Label(frame, text="Num. Preventivo:").grid(row=0, column=0, sticky="w", padx=(0, 5), pady=4)
