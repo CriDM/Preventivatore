@@ -99,3 +99,22 @@ def load_local_quote(filepath: str) -> Optional[dict]:
             return json.load(f)
     except Exception:
         return None
+
+def get_woo_products_file() -> Path:
+    return get_base_dir() / "woo_products.json"
+
+def load_woo_products() -> List[Dict]:
+    """Carica la cache locale dei prodotti WooCommerce."""
+    file_path = get_woo_products_file()
+    if not file_path.exists():
+        return []
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return []
+
+def save_woo_products(products: List[Dict]) -> None:
+    """Salva la lista dei prodotti nella cache locale."""
+    with open(get_woo_products_file(), "w", encoding="utf-8") as f:
+        json.dump(products, f, ensure_ascii=False, indent=2)

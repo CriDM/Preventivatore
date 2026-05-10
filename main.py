@@ -1,6 +1,8 @@
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import json
+import threading
 import storage
+import woo_sync
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
@@ -46,7 +48,9 @@ class PreventivoApp:
         # Percorso "nascosto" in stile vera app (nella home dell'utente)
         self.settings_dir = Path.home() / ".preventivatore"
         self.settings_file = self.settings_dir / "settings.json"
+
         self.settings = self._load_settings()
+        self.woo_products = storage.load_woo_products()
 
         self._build_header()
         
@@ -75,7 +79,10 @@ class PreventivoApp:
             "email": "",
             "phone": "",
             "logo_path": "",
-            "quote_number": "1"
+            "quote_number": "1",
+            "woo_url": "",
+            "woo_key": "",
+            "woo_secret": ""
         }
 
     def _set_window_icon(self) -> None:
@@ -144,7 +151,7 @@ class PreventivoApp:
     def open_settings_dialog(self, first_run=False) -> None:
         dialog = tk.Toplevel(self.root)
         dialog.title("Setup Dati Azienda" if first_run else "Impostazioni Azienda")
-        dialog.geometry("550x450")
+        dialog.geometry("550x650")
         dialog.transient(self.root)
         dialog.grab_set()
 
@@ -207,10 +214,64 @@ class PreventivoApp:
             self.settings["email"] = email_var.get().strip()
             self.settings["phone"] = phone_var.get().strip()
             self.settings["logo_path"] = logo_var.get().strip()
+            self.settings["woo_url"] = woo_url_var.get().strip()
+            self.settings["woo_key"] = woo_key_var.get().strip()
+            self.settings["woo_secret"] = woo_secret_var.get().strip()
             self._save_settings()
             dialog.destroy()
 
-        ttk.Button(frame, text="Salva Impostazioni", command=save_and_close).grid(row=6, column=0, columnspan=2, pady=20)
+
+        ttk.Separator(frame, orient="horizontal").grid(row=6, column=0, columnspan=3, sticky="ew", pady=10)
+
+        ttk.Label(frame, text="Integrazione WooCommerce", font=("Helvetica", 10, "bold")).grid(row=7, column=0, columnspan=2, sticky="w", pady=5)
+
+        ttk.Label(frame, text="URL Sito (es. https://miosito.it):").grid(row=8, column=0, sticky="w", pady=5)
+        woo_url_var = tk.StringVar(value=self.settings.get("woo_url", ""))
+        ttk.Entry(frame, textvariable=woo_url_var, width=40).grid(row=8, column=1, pady=5)
+
+        ttk.Label(frame, text="Consumer Key:").grid(row=9, column=0, sticky="w", pady=5)
+        woo_key_var = tk.StringVar(value=self.settings.get("woo_key", ""))
+        ttk.Entry(frame, textvariable=woo_key_var, width=40).grid(row=9, column=1, pady=5)
+
+        ttk.Label(frame, text="Consumer Secret:").grid(row=10, column=0, sticky="w", pady=5)
+        woo_secret_var = tk.StringVar(value=self.settings.get("woo_secret", ""))
+        ttk.Entry(frame, textvariable=woo_secret_var, width=40, show="*").grid(row=10, column=1, pady=5)
+
+        sync_lbl = ttk.Label(frame, text="")
+        sync_lbl.grid(row=11, column=1, sticky="w", pady=5)
+
+        def run_sync():
+            url = woo_url_var.get().strip()
+            key = woo_key_var.get().strip()
+            secret = woo_secret_var.get().strip()
+            if not url or not key or not secret:
+                messagebox.showerror("Errore", "Inserisci URL, Key e Secret per sincronizzare.")
+                return
+
+            sync_btn.config(state="disabled")
+            sync_lbl.config(text="Sincronizzazione in corso...", foreground="blue")
+
+            def update_status(msg):
+                self.root.after(0, lambda: sync_lbl.config(text=msg))
+
+            def fetch_thread():
+                try:
+                    products = woo_sync.fetch_woocommerce_products(url, key, secret, update_callback=update_status)
+                    storage.save_woo_products(products)
+                    self.woo_products = products
+                    self.root.after(0, self._update_woo_autocomplete)
+                except Exception as e:
+                    self.root.after(0, lambda: sync_lbl.config(text=f"Errore: {e}", foreground="red"))
+                finally:
+                    self.root.after(0, lambda: sync_btn.config(state="normal"))
+
+            threading.Thread(target=fetch_thread, daemon=True).start()
+
+        sync_btn = ttk.Button(frame, text="🔄 Sincronizza Prodotti", command=run_sync)
+        sync_btn.grid(row=11, column=0, pady=5, sticky="w")
+
+
+        ttk.Button(frame, text="Salva Impostazioni", command=save_and_close).grid(row=12, column=0, columnspan=2, pady=20)
 
     def increment_quote_number(self):
         current = self.quote_number_var.get().strip()
@@ -288,7 +349,8 @@ class PreventivoApp:
         frame = ttk.LabelFrame(self.root, text="Aggiungi / Modifica Articolo", padding=12)
         frame.pack(fill="x", padx=12, pady=0)
 
-        ttk.Label(frame, text="Descrizione").grid(row=0, column=0, sticky="w", padx=(0, 8), pady=2)
+
+        ttk.Label(frame, text="Descrizione (Cerca in Woo)").grid(row=0, column=0, sticky="w", padx=(0, 8), pady=2)
         ttk.Label(frame, text="Prezzo cad. (€)").grid(row=0, column=1, sticky="w", padx=(0, 8), pady=2)
         ttk.Label(frame, text="Quantità").grid(row=0, column=2, sticky="w", padx=(0, 8), pady=2)
         ttk.Label(frame, text="IVA %").grid(row=0, column=3, sticky="w", padx=(0, 8), pady=2)
@@ -298,14 +360,90 @@ class PreventivoApp:
         self.qty_var = tk.StringVar()
         self.vat_var = tk.StringVar(value="22")
 
-        ttk.Entry(frame, textvariable=self.name_var, width=40).grid(row=1, column=0, sticky="ew", padx=(0, 8), pady=4)
+        # WooCommerce Autocomplete with Entry + Floating Listbox
+        self.desc_entry = ttk.Entry(frame, textvariable=self.name_var, width=40)
+        self.desc_entry.grid(row=1, column=0, sticky="ew", padx=(0, 8), pady=4)
+
+        self.woo_name_map = {}
+
+        # Floating Toplevel for autocomplete (escapes all clipping)
+        self.autocomplete_win = tk.Toplevel(self.root)
+        self.autocomplete_win.wm_overrideredirect(True)
+        self.autocomplete_win.withdraw() # Hidden by default
+
+        self.autocomplete_listbox = tk.Listbox(self.autocomplete_win, height=6, font=("Helvetica", 10))
+        self.autocomplete_listbox.pack(fill="both", expand=True)
+
+        self._update_woo_autocomplete()
+
+        def hide_autocomplete(event=None):
+            self.autocomplete_win.withdraw()
+
+        def on_desc_key(event):
+            if event.keysym in ("Return", "Up", "Down", "Left", "Right", "Escape"):
+                if event.keysym == "Escape":
+                    hide_autocomplete()
+                return
+
+            val = self.name_var.get().lower()
+            if not val:
+                hide_autocomplete()
+                return
+
+            filtered = [name for name in self.woo_name_map.keys() if val in name.lower()]
+
+            if filtered:
+                self.autocomplete_listbox.delete(0, tk.END)
+                for item in filtered[:15]: # Show max 15 items
+                    self.autocomplete_listbox.insert(tk.END, item)
+
+                # Position the toplevel window exactly under the entry globally
+                x = self.desc_entry.winfo_rootx()
+                y = self.desc_entry.winfo_rooty() + self.desc_entry.winfo_height()
+                w = self.desc_entry.winfo_width()
+                # height roughly calculated as 6 rows * 20px
+                self.autocomplete_win.geometry(f"{w}x120+{x}+{y}")
+                self.autocomplete_win.deiconify()
+                self.autocomplete_win.lift()
+            else:
+                hide_autocomplete()
+
+        def on_listbox_select(event):
+            if not self.autocomplete_listbox.curselection():
+                return
+
+            index = self.autocomplete_listbox.curselection()[0]
+            val = self.autocomplete_listbox.get(index)
+
+            self.name_var.set(val)
+            if val in self.woo_name_map:
+                prod = self.woo_name_map[val]
+                self.price_var.set(str(prod["price"]))
+                self.vat_var.set("0")
+
+            hide_autocomplete()
+            self.desc_entry.focus_set()
+            # Move cursor to end
+            self.desc_entry.icursor(tk.END)
+
+        self.desc_entry.bind("<KeyRelease>", on_desc_key)
+        self.desc_entry.bind("<FocusOut>", lambda e: self.root.after(200, hide_autocomplete))
+        self.autocomplete_listbox.bind("<ButtonRelease-1>", on_listbox_select)
+
         ttk.Entry(frame, textvariable=self.price_var, width=12).grid(row=1, column=1, sticky="ew", padx=(0, 8), pady=4)
         ttk.Entry(frame, textvariable=self.qty_var, width=10).grid(row=1, column=2, sticky="ew", padx=(0, 8), pady=4)
         ttk.Entry(frame, textvariable=self.vat_var, width=8).grid(row=1, column=3, sticky="ew", padx=(0, 8), pady=4)
 
+
         ttk.Button(frame, text="➕ Aggiungi alla lista", command=self.add_item).grid(row=1, column=4, padx=(6, 0), pady=4)
 
         frame.columnconfigure(0, weight=1)
+
+
+    def _update_woo_autocomplete(self):
+        if not hasattr(self, 'desc_entry'):
+            return
+        self.woo_name_map = {p["name"].strip(): p for p in self.woo_products if p.get("name") and p["name"].strip()}
 
     def _build_table(self) -> None:
         frame = ttk.LabelFrame(self.root, text="Articoli Inseriti", padding=10)
@@ -489,6 +627,9 @@ class PreventivoApp:
         self.name_var.set("")
         self.price_var.set("")
         self.qty_var.set("")
+        self.vat_var.set("22")
+        if hasattr(self, 'autocomplete_win'):
+            self.autocomplete_win.withdraw()
         
     def _insert_tree_row(self, item):
         qty_str = f"{item['quantity']:,.0f}" if item['quantity'] % 1 == 0 else format_decimal(item['quantity'])
