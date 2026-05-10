@@ -357,14 +357,18 @@ class PreventivoApp:
 
         self.woo_name_map = {}
 
-        # Floating listbox
-        self.autocomplete_listbox = tk.Listbox(self.root, height=6, font=("Helvetica", 10))
-        self.autocomplete_listbox.place_forget() # Hidden by default
+        # Floating Toplevel for autocomplete (escapes all clipping)
+        self.autocomplete_win = tk.Toplevel(self.root)
+        self.autocomplete_win.wm_overrideredirect(True)
+        self.autocomplete_win.withdraw() # Hidden by default
+
+        self.autocomplete_listbox = tk.Listbox(self.autocomplete_win, height=6, font=("Helvetica", 10))
+        self.autocomplete_listbox.pack(fill="both", expand=True)
 
         self._update_woo_autocomplete()
 
         def hide_autocomplete(event=None):
-            self.autocomplete_listbox.place_forget()
+            self.autocomplete_win.withdraw()
 
         def on_desc_key(event):
             if event.keysym in ("Return", "Up", "Down", "Left", "Right", "Escape"):
@@ -384,11 +388,14 @@ class PreventivoApp:
                 for item in filtered[:15]: # Show max 15 items
                     self.autocomplete_listbox.insert(tk.END, item)
 
-                # Position the listbox under the entry
-                x = self.desc_entry.winfo_rootx() - self.root.winfo_rootx()
-                y = self.desc_entry.winfo_rooty() - self.root.winfo_rooty() + self.desc_entry.winfo_height()
-                self.autocomplete_listbox.place(x=x, y=y, width=self.desc_entry.winfo_width())
-                self.autocomplete_listbox.lift()
+                # Position the toplevel window exactly under the entry globally
+                x = self.desc_entry.winfo_rootx()
+                y = self.desc_entry.winfo_rooty() + self.desc_entry.winfo_height()
+                w = self.desc_entry.winfo_width()
+                # height roughly calculated as 6 rows * 20px
+                self.autocomplete_win.geometry(f"{w}x120+{x}+{y}")
+                self.autocomplete_win.deiconify()
+                self.autocomplete_win.lift()
             else:
                 hide_autocomplete()
 
@@ -534,8 +541,8 @@ class PreventivoApp:
         self.price_var.set("")
         self.qty_var.set("")
         self.vat_var.set("22")
-        if hasattr(self, 'autocomplete_listbox'):
-            self.autocomplete_listbox.place_forget()
+        if hasattr(self, 'autocomplete_win'):
+            self.autocomplete_win.withdraw()
         
     def _insert_tree_row(self, item):
         qty_str = f"{item['quantity']:,.0f}" if item['quantity'] % 1 == 0 else format_decimal(item['quantity'])
