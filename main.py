@@ -360,16 +360,27 @@ class PreventivoApp:
 
         def on_desc_key(event):
             # Gestione autocomplete dinamico
-            if event.keysym in ("Return", "Up", "Down", "Left", "Right"):
+            if event.keysym in ("Return", "Up", "Down", "Left", "Right", "Escape"):
                 return
 
             val = self.name_var.get().lower()
             if not val:
                 self.desc_combo["values"] = list(self.woo_name_map.keys())
+                self.desc_combo.tk.call('ttk::combobox::Unpost', self.desc_combo)
                 return
 
             filtered = [name for name in self.woo_name_map.keys() if val in name.lower()]
             self.desc_combo["values"] = filtered
+            if filtered:
+                try:
+                    self.desc_combo.tk.call('ttk::combobox::Post', self.desc_combo)
+                except Exception:
+                    pass
+            else:
+                try:
+                    self.desc_combo.tk.call('ttk::combobox::Unpost', self.desc_combo)
+                except Exception:
+                    pass
 
         def on_desc_selected(event):
             val = self.name_var.get()
@@ -393,7 +404,7 @@ class PreventivoApp:
     def _update_woo_autocomplete(self):
         if not hasattr(self, 'desc_combo'):
             return
-        self.woo_name_map = {p["name"]: p for p in self.woo_products if "name" in p}
+        self.woo_name_map = {p["name"].strip(): p for p in self.woo_products if p.get("name") and p["name"].strip()}
         self.desc_combo["values"] = list(self.woo_name_map.keys())
 
     def _build_table(self) -> None:
