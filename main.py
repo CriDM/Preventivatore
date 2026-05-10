@@ -462,6 +462,7 @@ class PreventivoApp:
         self.customer_address_var.set("")
         self.contact_person_var.set("")
         self.oggetto_var.set("")
+        self.final_notes_var.set("")
         self.items.clear()
         self.tree.delete(*self.tree.get_children())
         self._refresh_summary()
