@@ -62,7 +62,7 @@ class PreventivoApp:
             try:
                 with open(self.settings_file, "r", encoding="utf-8") as f:
                     return json.load(f)
-            except Exception:
+            except (OSError, json.JSONDecodeError):
                 pass
         return {
             "company_name": "",
@@ -88,7 +88,7 @@ class PreventivoApp:
                         icon_abs_path = str(ico_path.resolve())
                         self.root.iconbitmap(default=icon_abs_path)
                         return
-                    except Exception:
+                    except (tk.TclError, OSError):
                         pass  # Se fallisce, prova PNG
                 
                 # Se ICO non funziona, prova PNG su Windows
@@ -100,7 +100,7 @@ class PreventivoApp:
                         self._icon_image = photo
                         self.root.iconphoto(False, photo)
                         return
-                    except Exception:
+                    except (tk.TclError, OSError):
                         pass
             
             # Su macOS e Linux: preferisci PNG con iconphoto()
@@ -112,9 +112,9 @@ class PreventivoApp:
                         self._icon_image = photo
                         self.root.iconphoto(False, photo)
                         return
-                    except Exception:
+                    except (tk.TclError, OSError):
                         pass
-        except Exception:
+        except (tk.TclError, OSError):
             pass  # Se non riesce, continua senza icona (non critico)
 
     def _get_assets_dir(self) -> Path:

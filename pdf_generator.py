@@ -78,7 +78,7 @@ def generate_quote_pdf(items: List[Dict], data: Dict, output_path: str) -> str:
             logo_table.setStyle(TableStyle([("ALIGN", (0, 0), (-1, -1), "CENTER")]))
             story.append(logo_table)
             story.append(Spacer(1, 6 * mm))
-        except Exception:
+        except (OSError, ValueError):
             pass
     
     # Info Azienda Sotto il Logo (nome in centro e bold)
