@@ -23,7 +23,43 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install reportlab==4.5.0 pyinstaller==6.20.0 svglib==1.5.1
+          pip install reportlab==4.5.0 pyinstaller==6.20.0 svglib==1.5.1 pillow==12.2.0
+
+      - name: Ensure valid Windows icon
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+
+          ico = Path("assets/icon.ico")
+          png = Path("assets/icon.png")
+
+          def is_valid_ico(path: Path) -> bool:
+            try:
+              im = Image.open(path)
+              sizes = im.ico.sizes() if getattr(im, "ico", None) else set()
+              return im.format == "ICO" and bool(sizes)
+            except Exception:
+              return False
+
+          if not is_valid_ico(ico):
+            if not png.exists():
+              raise FileNotFoundError("assets/icon.png non trovato: impossibile generare icon.ico")
+            src = Image.open(png).convert("RGBA")
+            side = max(src.size)
+            canvas = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+            offset = ((side - src.width) // 2, (side - src.height) // 2)
+            canvas.paste(src, offset)
+            canvas.save(
+              ico,
+              format="ICO",
+              sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)],
+            )
+            print("Generato assets/icon.ico valido da assets/icon.png")
+          else:
+            print("assets/icon.ico gia valido")
+          PY
 
       - name: Build EXE with PyInstaller
         run: |

@@ -32,6 +32,7 @@ class PreventivoApp:
         self.root.title("Preventivatore - Croce e Cuore ARTE SACRA")
         self.root.geometry("1200x800")
         self.root.minsize(1000, 700)
+        self._icon_image = None
 
         # Imposta icona dell'app (cross-platform)
         self._set_window_icon()
@@ -76,7 +77,7 @@ class PreventivoApp:
     def _set_window_icon(self) -> None:
         """Carica l'icona della finestra (cross-platform: macOS, Windows, Linux)."""
         try:
-            assets_dir = Path(__file__).parent / "assets"
+            assets_dir = self._get_assets_dir()
             
             # Su Windows: prova ICO con iconbitmap()
             if platform.system() == "Windows":
@@ -96,6 +97,7 @@ class PreventivoApp:
                     try:
                         # Carica PNG con PhotoImage
                         photo = tk.PhotoImage(file=str(png_path.resolve()))
+                        self._icon_image = photo
                         self.root.iconphoto(False, photo)
                         return
                     except Exception:
@@ -107,12 +109,18 @@ class PreventivoApp:
                 if png_path.exists():
                     try:
                         photo = tk.PhotoImage(file=str(png_path.resolve()))
+                        self._icon_image = photo
                         self.root.iconphoto(False, photo)
                         return
                     except Exception:
                         pass
         except Exception:
             pass  # Se non riesce, continua senza icona (non critico)
+
+    def _get_assets_dir(self) -> Path:
+        # In PyInstaller one-file i file aggiuntivi sono estratti in _MEIPASS.
+        base_path = Path(getattr(sys, "_MEIPASS", Path(__file__).parent))
+        return base_path / "assets"
 
     def _save_settings(self) -> None:
         self.settings_dir.mkdir(exist_ok=True)
