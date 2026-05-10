@@ -196,12 +196,42 @@ Output: `dist\Preventivatore.exe`
 **Condividi**: Copia `dist/Preventivatore.app` su altre macchine (funziona direttamente)
 
 ### Per Windows:
-1. Su **Windows PC**, esegui:
+**Opzione 1 - Scarica il .exe precompilato** ⭐ CONSIGLIATO
+1. Vai su: https://github.com/CriDM/Preventivatore
+2. Clicca su **"Actions"** nel menu in alto
+3. Seleziona l'ultima build ("Build Windows EXE")
+4. Scorri fino a "Artifacts" e clicca **"Preventivatore-Windows"**
+5. Scarica `Preventivatore.exe` (NO dipendenze richieste!)
+
+**Opzione 2 - Compila tu stesso** (se sei su Windows PC)
+1. Clone il repository:
+   ```powershell
+   git clone https://github.com/CriDM/Preventivatore.git
+   cd Preventivatore
+   ```
+2. Setup environment:
+   ```powershell
+   py -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   pip install -r requirements.txt
+   ```
+3. Compila:
    ```powershell
    pyinstaller --noconfirm --clean --onefile --windowed --name Preventivatore --icon=assets/icon.ico --add-data "assets;assets" main.py
    ```
-2. Genera: `dist\Preventivatore.exe`
-3. Condividi l'exe (no dipendenze Python richieste)
+4. Usa: `dist\Preventivatore.exe`
+
+---
+
+## 📋 Riepilogo: Come eseguire Preventivatore
+
+| Metodo | Comando | Piattaforma | Vantaggi |
+|--------|---------|------------|----------|
+| **Python (sorgente)** | `python main.py` | macOS / Windows / Linux | Veloce, facile debug |
+| **App Bundle** | Finder: `dist/Preventivatore.app` | macOS | Icona Dock, nome corretto, nativo |
+| **EXE compilato** | `dist\Preventivatore.exe` | Windows | Distribuibile, no dipendenze |
+
+---
 
 
 
