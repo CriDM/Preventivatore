@@ -351,45 +351,67 @@ class PreventivoApp:
         self.qty_var = tk.StringVar()
         self.vat_var = tk.StringVar(value="22")
 
-        # WooCommerce Autocomplete Combobox
-        self.desc_combo = ttk.Combobox(frame, textvariable=self.name_var, width=40)
-        self.desc_combo.grid(row=1, column=0, sticky="ew", padx=(0, 8), pady=4)
+        # WooCommerce Autocomplete with Entry + Floating Listbox
+        self.desc_entry = ttk.Entry(frame, textvariable=self.name_var, width=40)
+        self.desc_entry.grid(row=1, column=0, sticky="ew", padx=(0, 8), pady=4)
 
         self.woo_name_map = {}
+
+        # Floating listbox
+        self.autocomplete_listbox = tk.Listbox(self.root, height=6, font=("Helvetica", 10))
+        self.autocomplete_listbox.place_forget() # Hidden by default
+
         self._update_woo_autocomplete()
 
+        def hide_autocomplete(event=None):
+            self.autocomplete_listbox.place_forget()
+
         def on_desc_key(event):
-            # Gestione autocomplete dinamico
             if event.keysym in ("Return", "Up", "Down", "Left", "Right", "Escape"):
+                if event.keysym == "Escape":
+                    hide_autocomplete()
                 return
 
             val = self.name_var.get().lower()
             if not val:
-                self.desc_combo["values"] = list(self.woo_name_map.keys())
-                self.desc_combo.tk.call('ttk::combobox::Unpost', self.desc_combo)
+                hide_autocomplete()
                 return
 
             filtered = [name for name in self.woo_name_map.keys() if val in name.lower()]
-            self.desc_combo["values"] = filtered
-            if filtered:
-                try:
-                    self.desc_combo.tk.call('ttk::combobox::Post', self.desc_combo)
-                except Exception:
-                    pass
-            else:
-                try:
-                    self.desc_combo.tk.call('ttk::combobox::Unpost', self.desc_combo)
-                except Exception:
-                    pass
 
-        def on_desc_selected(event):
-            val = self.name_var.get()
+            if filtered:
+                self.autocomplete_listbox.delete(0, tk.END)
+                for item in filtered[:15]: # Show max 15 items
+                    self.autocomplete_listbox.insert(tk.END, item)
+
+                # Position the listbox under the entry
+                x = self.desc_entry.winfo_rootx() - self.root.winfo_rootx()
+                y = self.desc_entry.winfo_rooty() - self.root.winfo_rooty() + self.desc_entry.winfo_height()
+                self.autocomplete_listbox.place(x=x, y=y, width=self.desc_entry.winfo_width())
+                self.autocomplete_listbox.lift()
+            else:
+                hide_autocomplete()
+
+        def on_listbox_select(event):
+            if not self.autocomplete_listbox.curselection():
+                return
+
+            index = self.autocomplete_listbox.curselection()[0]
+            val = self.autocomplete_listbox.get(index)
+
+            self.name_var.set(val)
             if val in self.woo_name_map:
                 prod = self.woo_name_map[val]
                 self.price_var.set(str(prod["price"]))
 
-        self.desc_combo.bind("<KeyRelease>", on_desc_key)
-        self.desc_combo.bind("<<ComboboxSelected>>", on_desc_selected)
+            hide_autocomplete()
+            self.desc_entry.focus_set()
+            # Move cursor to end
+            self.desc_entry.icursor(tk.END)
+
+        self.desc_entry.bind("<KeyRelease>", on_desc_key)
+        self.desc_entry.bind("<FocusOut>", lambda e: self.root.after(200, hide_autocomplete))
+        self.autocomplete_listbox.bind("<ButtonRelease-1>", on_listbox_select)
 
         ttk.Entry(frame, textvariable=self.price_var, width=12).grid(row=1, column=1, sticky="ew", padx=(0, 8), pady=4)
         ttk.Entry(frame, textvariable=self.qty_var, width=10).grid(row=1, column=2, sticky="ew", padx=(0, 8), pady=4)
@@ -402,10 +424,9 @@ class PreventivoApp:
 
 
     def _update_woo_autocomplete(self):
-        if not hasattr(self, 'desc_combo'):
+        if not hasattr(self, 'desc_entry'):
             return
         self.woo_name_map = {p["name"].strip(): p for p in self.woo_products if p.get("name") and p["name"].strip()}
-        self.desc_combo["values"] = list(self.woo_name_map.keys())
 
     def _build_table(self) -> None:
         frame = ttk.LabelFrame(self.root, text="Articoli Inseriti", padding=10)
@@ -512,6 +533,9 @@ class PreventivoApp:
         self.name_var.set("")
         self.price_var.set("")
         self.qty_var.set("")
+        self.vat_var.set("22")
+        if hasattr(self, 'autocomplete_listbox'):
+            self.autocomplete_listbox.place_forget()
         
     def _insert_tree_row(self, item):
         qty_str = f"{item['quantity']:,.0f}" if item['quantity'] % 1 == 0 else format_decimal(item['quantity'])
