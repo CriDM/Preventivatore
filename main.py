@@ -351,14 +351,28 @@ class PreventivoApp:
 
         x, y, width, height = self.tree.bbox(row_id, column)
 
-        entry = ttk.Entry(self.tree)
-        entry.place(x=x, y=y, width=width, height=height)
+        # Determine justification
+        if col_index == 0:
+            justify = "left"
+        elif col_index == 1:
+            justify = "right"
+        elif col_index in [2, 4]:
+            justify = "center"
+        else:
+            justify = "left"
+
+        # Use tk.Entry instead of ttk.Entry to avoid clipping
+        entry = tk.Entry(self.tree, justify=justify, font=("Helvetica", 10))
+        # Add slight padding to height to prevent clipping
+        entry.place(x=x, y=y-2, width=width, height=height+4)
 
         old_val = self.tree.item(row_id, 'values')[col_index]
         entry.insert(0, old_val)
         entry.focus_set()
 
         def save_edit(evt):
+            if not entry.winfo_exists():
+                return
             new_val = entry.get()
             entry.destroy()
             if new_val == old_val:
