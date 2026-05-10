@@ -30,8 +30,8 @@ class PreventivoApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("Preventivatore - Croce e Cuore ARTE SACRA")
-        self.root.geometry("1080x720")
-        self.root.minsize(980, 650)
+        self.root.geometry("1200x800")
+        self.root.minsize(1000, 700)
 
         # Imposta icona dell'app (cross-platform)
         self._set_window_icon()
@@ -78,26 +78,39 @@ class PreventivoApp:
         try:
             assets_dir = Path(__file__).parent / "assets"
             
+            # Su Windows: prova ICO con iconbitmap()
+            if platform.system() == "Windows":
+                ico_path = assets_dir / "icon.ico"
+                if ico_path.exists():
+                    try:
+                        # Usa il path assoluto e converte a string in formato Windows
+                        icon_abs_path = str(ico_path.resolve())
+                        self.root.iconbitmap(default=icon_abs_path)
+                        return
+                    except Exception:
+                        pass  # Se fallisce, prova PNG
+                
+                # Se ICO non funziona, prova PNG su Windows
+                png_path = assets_dir / "icon.png"
+                if png_path.exists():
+                    try:
+                        # Carica PNG con PhotoImage
+                        photo = tk.PhotoImage(file=str(png_path.resolve()))
+                        self.root.iconphoto(False, photo)
+                        return
+                    except Exception:
+                        pass
+            
             # Su macOS e Linux: preferisci PNG con iconphoto()
             if platform.system() in ("Darwin", "Linux"):
                 png_path = assets_dir / "icon.png"
                 if png_path.exists():
                     try:
-                        from PIL import Image
-                        img = Image.open(str(png_path))
-                        photo = tk.PhotoImage(file=str(png_path))
+                        photo = tk.PhotoImage(file=str(png_path.resolve()))
                         self.root.iconphoto(False, photo)
                         return
-                    except ImportError:
-                        # Se PIL non è installato, salta silenziosamente
+                    except Exception:
                         pass
-            
-            # Su Windows: preferisci ICO con iconbitmap()
-            if platform.system() == "Windows":
-                ico_path = assets_dir / "icon.ico"
-                if ico_path.exists():
-                    self.root.iconbitmap(str(ico_path))
-                    return
         except Exception:
             pass  # Se non riesce, continua senza icona (non critico)
 
@@ -296,6 +309,7 @@ class PreventivoApp:
 
     def _build_buttons(self) -> None:
         # Questo frame è pacchettizzato BOTTOM, quindi starà sempre in fondo.
+        # fill="x" lo fa occupare tutto lo spazio orizzontale
         frame = ttk.Frame(self.root, padding=12)
         frame.pack(side="bottom", fill="x")
 
@@ -313,8 +327,8 @@ class PreventivoApp:
         right_frame = ttk.Frame(frame)
         right_frame.pack(side="right")
 
-        ttk.Button(right_frame, text="Svuota Tutto", command=self.new_project).pack(side="left", padx=4)
-        ttk.Button(right_frame, text="💾 Salva Dati (.pquote)", command=self.save_project).pack(side="left", padx=4)
+        ttk.Button(right_frame, text="🆕 Svuota Tutto", command=self.new_project).pack(side="left", padx=4)
+        ttk.Button(right_frame, text="💾 Salva (.pquote)", command=self.save_project).pack(side="left", padx=4)
         ttk.Button(right_frame, text="📂 Apri", command=self.load_project).pack(side="left", padx=4)
         ttk.Button(right_frame, text="📄 GENERA PDF", command=self.generate_pdf, style="Accent.TButton").pack(side="left", padx=(15, 0))
 
