@@ -1,9 +1,11 @@
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import json
+import storage
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from datetime import date
+import datetime
 import sys
 import platform
 
@@ -245,7 +247,16 @@ class PreventivoApp:
 
         # Riga 2: Cliente e Indirizzo
         ttk.Label(frame, text="Cliente:").grid(row=1, column=0, sticky="w", padx=(0, 5), pady=4)
-        ttk.Entry(frame, textvariable=self.customer_name_var, width=35).grid(row=1, column=1, sticky="ew", padx=(0, 15), pady=4)
+
+        self.customer_combo = ttk.Combobox(frame, textvariable=self.customer_name_var, width=33)
+        self.customer_combo.grid(row=1, column=1, sticky="ew", padx=(0, 15), pady=4)
+
+        # Popoliamo la combobox con i clienti
+        self._refresh_customer_combo()
+
+        # Binding dell'evento
+        self.customer_combo.bind("<<ComboboxSelected>>", self._on_customer_selected)
+
 
         ttk.Label(frame, text="Indirizzo Cliente:").grid(row=1, column=2, sticky="w", padx=(0, 5), pady=4)
         ttk.Entry(frame, textvariable=self.customer_address_var, width=35).grid(row=1, column=3, sticky="ew", pady=4)
@@ -336,9 +347,23 @@ class PreventivoApp:
         right_frame.pack(side="right")
 
         ttk.Button(right_frame, text="🆕 Svuota Tutto", command=self.new_project).pack(side="left", padx=4)
-        ttk.Button(right_frame, text="💾 Salva (.pquote)", command=self.save_project).pack(side="left", padx=4)
-        ttk.Button(right_frame, text="📂 Apri", command=self.load_project).pack(side="left", padx=4)
+        ttk.Button(right_frame, text="🗄️ Archivio", command=self.show_archive_window).pack(side="left", padx=4)
+        ttk.Button(right_frame, text="💾 Esporta", command=self.save_project).pack(side="left", padx=4)
+        ttk.Button(right_frame, text="📂 Importa", command=self.load_project).pack(side="left", padx=4)
         ttk.Button(right_frame, text="📄 GENERA PDF", command=self.generate_pdf, style="Accent.TButton").pack(side="left", padx=(15, 0))
+
+
+    def _refresh_customer_combo(self):
+        customers = storage.load_customers()
+        self.customer_combo['values'] = sorted(list(customers.keys()))
+
+    def _on_customer_selected(self, event=None):
+        selected = self.customer_name_var.get()
+        if not selected: return
+        customer_data = storage.get_customer(selected)
+        if customer_data:
+            self.customer_address_var.set(customer_data.get("address", ""))
+            self.contact_person_var.set(customer_data.get("contact", ""))
 
     def _validate_fields(self):
         name = self.name_var.get().strip()
@@ -445,6 +470,14 @@ class PreventivoApp:
         return [{k: str(v) if isinstance(v, Decimal) else v for k, v in i.items()} for i in self.items]
 
     def save_project(self) -> None:
+        # Salva o aggiorna in anagrafica
+        storage.save_customer(
+            self.customer_name_var.get(),
+            self.customer_address_var.get(),
+            self.contact_person_var.get()
+        )
+        self._refresh_customer_combo()
+
         path = filedialog.asksaveasfilename(defaultextension=".pquote", filetypes=[("Progetto Preventivatore", "*.pquote")])
         if not path: return
         payload = {
@@ -460,6 +493,69 @@ class PreventivoApp:
         }
         with open(path, "w", encoding="utf-8") as fp:
             json.dump(payload, fp, ensure_ascii=False, indent=2)
+
+
+    def show_archive_window(self):
+        archive_win = tk.Toplevel(self.root)
+        archive_win.title("Archivio Preventivi Locali")
+        archive_win.geometry("600x400")
+        archive_win.transient(self.root)
+        archive_win.grab_set()
+
+        columns = ("filename", "date")
+        tree = ttk.Treeview(archive_win, columns=columns, show="headings")
+        tree.heading("filename", text="Nome File")
+        tree.heading("date", text="Data Creazione")
+        tree.column("filename", width=400, anchor="w")
+        tree.column("date", width=150, anchor="center")
+
+        import datetime
+        quotes = storage.list_local_quotes()
+        for q in quotes:
+            dt_str = datetime.datetime.fromtimestamp(q["mtime"]).strftime("%d/%m/%Y %H:%M")
+            tree.insert("", "end", values=(q["filename"], dt_str), tags=(q["filepath"],))
+
+        tree.pack(fill="both", expand=True, padx=10, pady=10)
+
+        def on_double_click(event):
+            selected = tree.selection()
+            if not selected: return
+            filepath = tree.item(selected[0], "tags")[0]
+            self._load_from_filepath(filepath)
+            archive_win.destroy()
+
+        tree.bind("<Double-1>", on_double_click)
+
+        ttk.Label(archive_win, text="Doppio clic su un preventivo per caricarlo.").pack(pady=(0,10))
+
+    def _load_from_filepath(self, filepath: str):
+        payload = storage.load_local_quote(filepath)
+        if not payload:
+            messagebox.showerror("Errore", "Impossibile caricare il file.")
+            return
+
+        cust = payload.get("customer", {})
+        self.customer_name_var.set(cust.get("name", ""))
+        self.customer_address_var.set(cust.get("address", ""))
+        self.contact_person_var.set(cust.get("contact", ""))
+        self.oggetto_var.set(cust.get("oggetto", ""))
+        self.quote_date_var.set(cust.get("quote_date", str(datetime.date.today().strftime("%d/%m/%Y"))))
+        self.final_notes_var.set(cust.get("notes", ""))
+
+        self.items = []
+        self.tree.delete(*self.tree.get_children())
+        for item in payload.get("items", []):
+            i = {
+                "name": str(item["name"]),
+                "unit_price": q(Decimal(str(item["unit_price"]))),
+                "quantity": q(Decimal(str(item["quantity"]))),
+                "vat_percent": q(Decimal(str(item["vat_percent"]))),
+                "total": q(Decimal(str(item["total"]))),
+                "total_with_vat": q(Decimal(str(item["total_with_vat"]))),
+            }
+            self.items.append(i)
+            self._insert_tree_row(i)
+        self._refresh_summary()
 
     def load_project(self) -> None:
         path = filedialog.askopenfilename(filetypes=[("Progetto Preventivatore", "*.pquote")])
@@ -495,6 +591,14 @@ class PreventivoApp:
             messagebox.showwarning("Errore", "Aggiungi articoli prima di generare il PDF.")
             return
 
+        # Salva o aggiorna in anagrafica
+        storage.save_customer(
+            self.customer_name_var.get(),
+            self.customer_address_var.get(),
+            self.contact_person_var.get()
+        )
+        self._refresh_customer_combo()
+
         out_name = f"Preventivo_{self.quote_number_var.get()}_{self.customer_name_var.get().replace(' ','_')}.pdf"
         file_path = filedialog.asksaveasfilename(defaultextension=".pdf", initialfile=out_name, filetypes=[("PDF", "*.pdf")])
         if not file_path: return
@@ -519,6 +623,21 @@ class PreventivoApp:
 
         try:
             generate_quote_pdf(self.items, doc_data, file_path)
+
+            # Salva una copia nel database locale
+            payload = {
+                "customer": {
+                    "name": self.customer_name_var.get(),
+                    "address": self.customer_address_var.get(),
+                    "contact": self.contact_person_var.get(),
+                    "oggetto": self.oggetto_var.get(),
+                    "quote_date": self.quote_date_var.get(),
+                    "notes": self.final_notes_var.get(),
+                },
+                "items": self._serialize_items()
+            }
+            storage.save_local_quote(payload, self.quote_number_var.get(), self.customer_name_var.get())
+
             messagebox.showinfo("Fatto!", f"PDF generato:\n{file_path}")
         except Exception as exc:
             messagebox.showerror("Errore PDF", str(exc))
