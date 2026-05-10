@@ -61,9 +61,105 @@ class PreventivoApp:
         self._build_form()
         self._build_table()
 
+        # Bindings scorciatoie globali
+        self.root.bind("<Control-s>", lambda e: self.save_project())
+        self.root.bind("<Command-s>", lambda e: self.save_project())
+        self.root.bind("<Control-p>", lambda e: self.generate_pdf())
+        self.root.bind("<Command-p>", lambda e: self.generate_pdf())
+
         # Se non c'è il nome azienda, è il primo avvio
         if not self.settings.get("company_name"):
             self.root.after(500, lambda: self.open_settings_dialog(first_run=True))
+
+        self.root.after(100, self._check_and_load_draft)
+
+    def _save_draft(self, *args) -> None:
+        if getattr(self, "_loading_draft", False):
+            return
+        payload = {
+            "customer": {
+                "name": self.customer_name_var.get(),
+                "address": self.customer_address_var.get(),
+                "contact": self.contact_person_var.get(),
+                "oggetto": self.oggetto_var.get(),
+                "quote_date": self.quote_date_var.get(),
+                "notes": self.final_notes_var.get(),
+            },
+            "items": self._serialize_items()
+        }
+        try:
+            with open(self.settings_dir / "draft.pquote", "w", encoding="utf-8") as f:
+                import json
+                json.dump(payload, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
+    def _delete_draft(self) -> None:
+        draft_file = self.settings_dir / "draft.pquote"
+        if draft_file.exists():
+            try:
+                draft_file.unlink()
+            except Exception:
+                pass
+
+    def _check_and_load_draft(self) -> None:
+        draft_file = self.settings_dir / "draft.pquote"
+        if draft_file.exists():
+            if messagebox.askyesno("Bozza trovata", "È stato trovato un preventivo non salvato in precedenza. Vuoi ripristinarlo?"):
+                self._loading_draft = True
+                try:
+                    import json
+                    with open(draft_file, "r", encoding="utf-8") as f:
+                        payload = json.load(f)
+
+                    cust = payload.get("customer", {})
+                    self.customer_name_var.set(cust.get("name", ""))
+                    self.customer_address_var.set(cust.get("address", ""))
+                    self.contact_person_var.set(cust.get("contact", ""))
+                    self.oggetto_var.set(cust.get("oggetto", ""))
+                    self.quote_date_var.set(cust.get("quote_date", ""))
+                    self.final_notes_var.set(cust.get("notes", ""))
+
+                    # Reset items
+                    self.items = []
+                    for item in self.tree.get_children():
+                        self.tree.delete(item)
+
+                    items_data = payload.get("items", [])
+                    for i_data in items_data:
+                        name = i_data.get("name", "")
+                        price = parse_decimal(str(i_data.get("unit_price", "0")), "Prezzo")
+                        qty = parse_decimal(str(i_data.get("quantity", "0")), "Quantità")
+                        vat = parse_decimal(str(i_data.get("vat_percent", "0")), "IVA")
+
+                        tot_riga = price * qty
+                        iva_riga = tot_riga * (vat / Decimal("100"))
+                        tot_con_iva = tot_riga + iva_riga
+
+                        self.items.append({
+                            "name": name,
+                            "unit_price": price,
+                            "quantity": qty,
+                            "total": tot_riga,
+                            "vat_percent": vat,
+                            "total_with_vat": tot_con_iva
+                        })
+                        self.tree.insert("", "end", values=(
+                            name,
+                            format_decimal(price),
+                            format_decimal(qty),
+                            format_decimal(tot_riga),
+                            format_decimal(vat),
+                            format_decimal(tot_con_iva),
+                        ))
+                    self._refresh_summary()
+                except Exception as e:
+                    messagebox.showerror("Errore", f"Impossibile caricare la bozza: {e}")
+                finally:
+                    self._loading_draft = False
+            else:
+                self._delete_draft()
+
 
     def _load_settings(self) -> dict:
         if self.settings_file.exists():
@@ -271,7 +367,44 @@ class PreventivoApp:
         sync_btn.grid(row=11, column=0, pady=5, sticky="w")
 
 
-        ttk.Button(frame, text="Salva Impostazioni", command=save_and_close).grid(row=12, column=0, columnspan=2, pady=20)
+        btn_frame = ttk.Frame(frame)
+        btn_frame.grid(row=12, column=0, columnspan=2, pady=20)
+
+        ttk.Button(btn_frame, text="Salva Impostazioni", command=save_and_close).pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="Esporta Settings", command=self.export_settings).pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="Importa Settings", command=lambda: self.import_settings(dialog)).pack(side="left", padx=5)
+
+    def export_settings(self) -> None:
+        path = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("JSON Settings", "*.json")], initialfile="preventivatore_settings.json")
+        if not path:
+            return
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(self.settings, f, ensure_ascii=False, indent=2)
+            messagebox.showinfo("Successo", "Impostazioni esportate correttamente!")
+        except Exception as exc:
+            messagebox.showerror("Errore", f"Impossibile esportare le impostazioni:\n{exc}")
+
+    def import_settings(self, dialog: tk.Toplevel) -> None:
+        path = filedialog.askopenfilename(filetypes=[("JSON Settings", "*.json")])
+        if not path:
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                new_settings = json.load(f)
+
+            # Merge settings
+            self.settings.update(new_settings)
+            self._save_settings()
+
+            messagebox.showinfo("Successo", "Impostazioni importate correttamente!")
+
+            # Close dialog and reopen to reflect changes
+            dialog.destroy()
+            self.open_settings_dialog()
+
+        except Exception as exc:
+            messagebox.showerror("Errore", f"Impossibile importare le impostazioni:\n{exc}")
 
     def increment_quote_number(self):
         current = self.quote_number_var.get().strip()
@@ -299,11 +432,21 @@ class PreventivoApp:
         self.quote_number_var = tk.StringVar(value=self.settings.get("quote_number", "1"))
         self.quote_date_var = tk.StringVar(value=str(date.today().strftime("%d/%m/%Y")))
         
+
         self.customer_name_var = tk.StringVar()
         self.customer_address_var = tk.StringVar()
         self.contact_person_var = tk.StringVar()
         self.oggetto_var = tk.StringVar()
         self.final_notes_var = tk.StringVar(value="")
+
+        # Traces for auto-save
+        self.customer_name_var.trace_add("write", self._save_draft)
+        self.customer_address_var.trace_add("write", self._save_draft)
+        self.contact_person_var.trace_add("write", self._save_draft)
+        self.oggetto_var.trace_add("write", self._save_draft)
+        self.final_notes_var.trace_add("write", self._save_draft)
+        self.quote_date_var.trace_add("write", self._save_draft)
+
 
         # Riga 1: N. Preventivo e Data
         ttk.Label(frame, text="Num. Preventivo:").grid(row=0, column=0, sticky="w", padx=(0, 5), pady=4)
@@ -383,6 +526,8 @@ class PreventivoApp:
             if event.keysym in ("Return", "Up", "Down", "Left", "Right", "Escape"):
                 if event.keysym == "Escape":
                     hide_autocomplete()
+                elif event.keysym == "Return":
+                    self.add_item()
                 return
 
             val = self.name_var.get().lower()
@@ -430,9 +575,16 @@ class PreventivoApp:
         self.desc_entry.bind("<FocusOut>", lambda e: self.root.after(200, hide_autocomplete))
         self.autocomplete_listbox.bind("<ButtonRelease-1>", on_listbox_select)
 
-        ttk.Entry(frame, textvariable=self.price_var, width=12).grid(row=1, column=1, sticky="ew", padx=(0, 8), pady=4)
-        ttk.Entry(frame, textvariable=self.qty_var, width=10).grid(row=1, column=2, sticky="ew", padx=(0, 8), pady=4)
-        ttk.Entry(frame, textvariable=self.vat_var, width=8).grid(row=1, column=3, sticky="ew", padx=(0, 8), pady=4)
+        self.price_entry = ttk.Entry(frame, textvariable=self.price_var, width=12)
+        self.price_entry.grid(row=1, column=1, sticky="ew", padx=(0, 8), pady=4)
+        self.qty_entry = ttk.Entry(frame, textvariable=self.qty_var, width=10)
+        self.qty_entry.grid(row=1, column=2, sticky="ew", padx=(0, 8), pady=4)
+        self.vat_entry = ttk.Entry(frame, textvariable=self.vat_var, width=8)
+        self.vat_entry.grid(row=1, column=3, sticky="ew", padx=(0, 8), pady=4)
+
+        self.price_entry.bind("<Return>", lambda e: self.add_item())
+        self.qty_entry.bind("<Return>", lambda e: self.add_item())
+        self.vat_entry.bind("<Return>", lambda e: self.add_item())
 
 
         ttk.Button(frame, text="➕ Aggiungi alla lista", command=self.add_item).grid(row=1, column=4, padx=(6, 0), pady=4)
@@ -544,6 +696,7 @@ class PreventivoApp:
                     format_decimal(item["total_with_vat"]),
                 ))
                 self._refresh_summary()
+                self._save_draft()
             except ValueError as exc:
                 messagebox.showerror("Errore di validazione", str(exc))
 
@@ -563,7 +716,7 @@ class PreventivoApp:
         self.summary_var = tk.StringVar(value="Totale Generale: € 0,00")
         ttk.Label(left_frame, textvariable=self.summary_var, font=("Helvetica", 11, "bold")).pack(side="left", padx=(0, 15))
         
-        ttk.Button(left_frame, text="✏️ Modifica riga", command=self.edit_selected).pack(side="left", padx=4)
+
         ttk.Button(left_frame, text="❌ Rimuovi", command=self.remove_selected).pack(side="left", padx=4)
 
         # Sezione di destra: Azioni progetto
@@ -623,6 +776,7 @@ class PreventivoApp:
         self.items.append(item)
         self._insert_tree_row(item)
         self._refresh_summary()
+        self._save_draft()
         
         self.name_var.set("")
         self.price_var.set("")
@@ -645,27 +799,6 @@ class PreventivoApp:
             )
         )
 
-    def edit_selected(self) -> None:
-        selected = self.tree.selection()
-        if not selected:
-            messagebox.showwarning("Nessuna selezione", "Seleziona un articolo dalla tabella per modificarlo.")
-            return
-
-        row_id = selected[0]
-        index = self.tree.index(row_id)
-        item = self.items[index]
-
-        # Riporta i dati nei form
-        self.name_var.set(item["name"])
-        self.price_var.set(str(item["unit_price"]))
-        self.qty_var.set(str(item["quantity"]))
-        self.vat_var.set(str(item["vat_percent"]))
-
-        # Rimuove l'articolo dalla lista e dalla tabella
-        self.tree.delete(row_id)
-        self.items.pop(index)
-        self._refresh_summary()
-
     def remove_selected(self) -> None:
         selected = self.tree.selection()
         if not selected:
@@ -676,6 +809,7 @@ class PreventivoApp:
             if 0 <= index < len(self.items):
                 self.items.pop(index)
         self._refresh_summary()
+        self._save_draft()
 
     def _refresh_summary(self) -> None:
         generale = q(sum((item["total_with_vat"] for item in self.items), Decimal("0")))
@@ -693,6 +827,7 @@ class PreventivoApp:
         self.items.clear()
         self.tree.delete(*self.tree.get_children())
         self._refresh_summary()
+        self._delete_draft()
 
     def _serialize_items(self):
         return [{k: str(v) if isinstance(v, Decimal) else v for k, v in i.items()} for i in self.items]
@@ -865,8 +1000,10 @@ class PreventivoApp:
                 "items": self._serialize_items()
             }
             storage.save_local_quote(payload, self.quote_number_var.get(), self.customer_name_var.get())
+            self._delete_draft()
 
             messagebox.showinfo("Fatto!", f"PDF generato:\n{file_path}")
+            self._delete_draft()
             # PDF PREVIEW
             try:
                 if platform.system() == "Windows":
