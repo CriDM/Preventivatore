@@ -410,6 +410,7 @@ class PreventivoApp:
             if val in self.woo_name_map:
                 prod = self.woo_name_map[val]
                 self.price_var.set(str(prod["price"]))
+                self.vat_var.set("0")
 
             hide_autocomplete()
             self.desc_entry.focus_set()
