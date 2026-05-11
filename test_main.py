@@ -1,11 +1,11 @@
 import sys
 from unittest.mock import MagicMock
 
-# Mock tkinter and other GUI related imports that might fail in headless environment
-sys.modules["tkinter"] = MagicMock()
-sys.modules["tkinter.filedialog"] = MagicMock()
-sys.modules["tkinter.messagebox"] = MagicMock()
-sys.modules["tkinter.ttk"] = MagicMock()
+# Mock PySide6 and other GUI related imports that might fail in headless environment
+sys.modules["PySide6"] = MagicMock()
+sys.modules["PySide6.QtWidgets"] = MagicMock()
+sys.modules["PySide6.QtCore"] = MagicMock()
+sys.modules["PySide6.QtGui"] = MagicMock()
 sys.modules["reportlab"] = MagicMock()
 sys.modules["reportlab.lib"] = MagicMock()
 sys.modules["reportlab.lib.colors"] = MagicMock()
