@@ -5,3 +5,4 @@ svglib==1.5.1
 # py2app==0.28.10
 
 
+customtkinter==5.2.2

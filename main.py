@@ -5,6 +5,7 @@ import storage
 import woo_sync
 from pathlib import Path
 import tkinter as tk
+import customtkinter as ctk
 from tkinter import filedialog, messagebox, ttk
 from datetime import date
 import datetime
@@ -34,7 +35,7 @@ def format_decimal(value: Decimal) -> str:
     return f"{q(value):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 class PreventivoApp:
-    def __init__(self, root: tk.Tk) -> None:
+    def __init__(self, root: ctk.CTk) -> None:
         self.root = root
         self.root.title("Preventivatore - Croce e Cuore ARTE SACRA")
         self.root.geometry("1200x800")
@@ -420,15 +421,20 @@ class PreventivoApp:
             messagebox.showinfo("Salvato", "Formato testo salvato come predefinito.")
 
     def _build_header(self) -> None:
-        header_frame = ttk.Frame(self.root)
+        header_frame = ctk.CTkFrame(self.root, fg_color="transparent")
         header_frame.pack(fill="x", padx=12, pady=(12, 0))
         
-        ttk.Label(header_frame, text="Compilazione Nuovo Preventivo", font=("Helvetica", 14, "bold")).pack(side="left")
-        ttk.Button(header_frame, text="⚙️ Impostazioni Azienda", command=self.open_settings_dialog).pack(side="right")
+        ctk.CTkLabel(header_frame, text="Compilazione Nuovo Preventivo", font=ctk.CTkFont(family="Helvetica", size=18, weight="bold")).pack(side="left")
+        ctk.CTkButton(header_frame, text="⚙️ Impostazioni Azienda", command=self.open_settings_dialog).pack(side="right")
 
     def _build_client_section(self) -> None:
-        frame = ttk.LabelFrame(self.root, text="Dati Documento e Cliente", padding=12)
-        frame.pack(fill="x", padx=12, pady=(8, 8))
+        frame_container = ctk.CTkFrame(self.root)
+        frame_container.pack(fill="x", padx=12, pady=(8, 8))
+
+        ctk.CTkLabel(frame_container, text="Dati Documento e Cliente", font=ctk.CTkFont(family="Helvetica", size=14, weight="bold")).pack(anchor="w", padx=12, pady=(8,0))
+
+        frame = ctk.CTkFrame(frame_container, fg_color="transparent")
+        frame.pack(fill="x", padx=12, pady=(0, 12))
 
         self.quote_number_var = tk.StringVar(value=self.settings.get("quote_number", "1"))
         self.quote_date_var = tk.StringVar(value=str(date.today().strftime("%d/%m/%Y")))
@@ -450,54 +456,56 @@ class PreventivoApp:
 
 
         # Riga 1: N. Preventivo e Data
-        ttk.Label(frame, text="Num. Preventivo:").grid(row=0, column=0, sticky="w", padx=(0, 5), pady=4)
-        num_frame = ttk.Frame(frame)
+        ctk.CTkLabel(frame, text="Num. Preventivo:").grid(row=0, column=0, sticky="w", padx=(0, 5), pady=4)
+        num_frame = ctk.CTkFrame(frame, fg_color="transparent")
         num_frame.grid(row=0, column=1, sticky="w", padx=(0, 15), pady=4)
-        ttk.Entry(num_frame, textvariable=self.quote_number_var, width=10).pack(side="left")
-        ttk.Button(num_frame, text="+1 Salva", command=self.increment_quote_number).pack(side="left", padx=(5, 0))
+        ctk.CTkEntry(num_frame, textvariable=self.quote_number_var, width=100).pack(side="left")
+        ctk.CTkButton(num_frame, text="+1 Salva", command=self.increment_quote_number, width=80).pack(side="left", padx=(5, 0))
 
-        ttk.Label(frame, text="Data:").grid(row=0, column=2, sticky="w", padx=(0, 5), pady=4)
-        ttk.Entry(frame, textvariable=self.quote_date_var, width=15).grid(row=0, column=3, sticky="w", pady=4)
+        ctk.CTkLabel(frame, text="Data:").grid(row=0, column=2, sticky="w", padx=(0, 5), pady=4)
+        ctk.CTkEntry(frame, textvariable=self.quote_date_var, width=150).grid(row=0, column=3, sticky="w", pady=4)
 
         # Riga 2: Cliente e Indirizzo
-        ttk.Label(frame, text="Cliente:").grid(row=1, column=0, sticky="w", padx=(0, 5), pady=4)
+        ctk.CTkLabel(frame, text="Cliente:").grid(row=1, column=0, sticky="w", padx=(0, 5), pady=4)
 
-        self.customer_combo = ttk.Combobox(frame, textvariable=self.customer_name_var, width=33)
+        self.customer_combo = ctk.CTkComboBox(frame, variable=self.customer_name_var, width=330, command=self._on_customer_selected)
         self.customer_combo.grid(row=1, column=1, sticky="ew", padx=(0, 15), pady=4)
 
         # Popoliamo la combobox con i clienti
         self._refresh_customer_combo()
 
-        # Binding dell'evento
-        self.customer_combo.bind("<<ComboboxSelected>>", self._on_customer_selected)
 
-
-        ttk.Label(frame, text="Indirizzo Cliente:").grid(row=1, column=2, sticky="w", padx=(0, 5), pady=4)
-        ttk.Entry(frame, textvariable=self.customer_address_var, width=35).grid(row=1, column=3, sticky="ew", pady=4)
+        ctk.CTkLabel(frame, text="Indirizzo Cliente:").grid(row=1, column=2, sticky="w", padx=(0, 5), pady=4)
+        ctk.CTkEntry(frame, textvariable=self.customer_address_var, width=350).grid(row=1, column=3, sticky="ew", pady=4)
 
         # Riga 3: Referente (Parroco) e Oggetto
-        ttk.Label(frame, text="Referente/Parroco:").grid(row=2, column=0, sticky="w", padx=(0, 5), pady=4)
-        ttk.Entry(frame, textvariable=self.contact_person_var, width=35).grid(row=2, column=1, sticky="ew", padx=(0, 15), pady=4)
+        ctk.CTkLabel(frame, text="Referente/Parroco:").grid(row=2, column=0, sticky="w", padx=(0, 5), pady=4)
+        ctk.CTkEntry(frame, textvariable=self.contact_person_var, width=350).grid(row=2, column=1, sticky="ew", padx=(0, 15), pady=4)
 
-        ttk.Label(frame, text="Oggetto Preventivo:").grid(row=2, column=2, sticky="w", padx=(0, 5), pady=4)
-        ttk.Entry(frame, textvariable=self.oggetto_var, width=35).grid(row=2, column=3, sticky="ew", pady=4)
+        ctk.CTkLabel(frame, text="Oggetto Preventivo:").grid(row=2, column=2, sticky="w", padx=(0, 5), pady=4)
+        ctk.CTkEntry(frame, textvariable=self.oggetto_var, width=350).grid(row=2, column=3, sticky="ew", pady=4)
 
         # Riga 4: Note finali
-        ttk.Label(frame, text="Note a piè pagina:").grid(row=3, column=0, sticky="w", padx=(0, 5), pady=4)
-        ttk.Entry(frame, textvariable=self.final_notes_var).grid(row=3, column=1, columnspan=3, sticky="ew", pady=4)
+        ctk.CTkLabel(frame, text="Note a piè pagina:").grid(row=3, column=0, sticky="w", padx=(0, 5), pady=4)
+        ctk.CTkEntry(frame, textvariable=self.final_notes_var).grid(row=3, column=1, columnspan=3, sticky="ew", pady=4)
 
         frame.columnconfigure(1, weight=1)
         frame.columnconfigure(3, weight=1)
 
     def _build_form(self) -> None:
-        frame = ttk.LabelFrame(self.root, text="Aggiungi / Modifica Articolo", padding=12)
-        frame.pack(fill="x", padx=12, pady=0)
+        frame_container = ctk.CTkFrame(self.root)
+        frame_container.pack(fill="x", padx=12, pady=0)
+
+        ctk.CTkLabel(frame_container, text="Aggiungi / Modifica Articolo", font=ctk.CTkFont(family="Helvetica", size=14, weight="bold")).pack(anchor="w", padx=12, pady=(8,0))
+
+        frame = ctk.CTkFrame(frame_container, fg_color="transparent")
+        frame.pack(fill="x", padx=12, pady=(0, 12))
 
 
-        ttk.Label(frame, text="Descrizione (Cerca in Woo)").grid(row=0, column=0, sticky="w", padx=(0, 8), pady=2)
-        ttk.Label(frame, text="Prezzo cad. (€)").grid(row=0, column=1, sticky="w", padx=(0, 8), pady=2)
-        ttk.Label(frame, text="Quantità").grid(row=0, column=2, sticky="w", padx=(0, 8), pady=2)
-        ttk.Label(frame, text="IVA %").grid(row=0, column=3, sticky="w", padx=(0, 8), pady=2)
+        ctk.CTkLabel(frame, text="Descrizione (Cerca in Woo)").grid(row=0, column=0, sticky="w", padx=(0, 8), pady=2)
+        ctk.CTkLabel(frame, text="Prezzo cad. (€)").grid(row=0, column=1, sticky="w", padx=(0, 8), pady=2)
+        ctk.CTkLabel(frame, text="Quantità").grid(row=0, column=2, sticky="w", padx=(0, 8), pady=2)
+        ctk.CTkLabel(frame, text="IVA %").grid(row=0, column=3, sticky="w", padx=(0, 8), pady=2)
 
         self.name_var = tk.StringVar()
         self.price_var = tk.StringVar()
@@ -505,7 +513,7 @@ class PreventivoApp:
         self.vat_var = tk.StringVar(value="22")
 
         # WooCommerce Autocomplete with Entry + Floating Listbox
-        self.desc_entry = ttk.Entry(frame, textvariable=self.name_var, width=40)
+        self.desc_entry = ctk.CTkEntry(frame, textvariable=self.name_var, width=400)
         self.desc_entry.grid(row=1, column=0, sticky="ew", padx=(0, 8), pady=4)
 
         self.woo_name_map = {}
@@ -519,6 +527,7 @@ class PreventivoApp:
         self.autocomplete_listbox.pack(fill="both", expand=True)
 
         self._update_woo_autocomplete()
+
 
         def hide_autocomplete(event=None):
             self.autocomplete_win.withdraw()
@@ -570,38 +579,49 @@ class PreventivoApp:
             hide_autocomplete()
             self.desc_entry.focus_set()
             # Move cursor to end
-            self.desc_entry.icursor(tk.END)
+
+            # Since desc_entry is CTkEntry we can use tk entry behind it
+            if hasattr(self.desc_entry, "_entry"):
+                 self.desc_entry._entry.icursor(tk.END)
 
         self.desc_entry.bind("<KeyRelease>", on_desc_key)
         self.desc_entry.bind("<FocusOut>", lambda e: self.root.after(200, hide_autocomplete))
         self.autocomplete_listbox.bind("<ButtonRelease-1>", on_listbox_select)
 
-        self.price_entry = ttk.Entry(frame, textvariable=self.price_var, width=12)
+
+
+        self.price_entry = ctk.CTkEntry(frame, textvariable=self.price_var, width=120)
         self.price_entry.grid(row=1, column=1, sticky="ew", padx=(0, 8), pady=4)
-        self.qty_entry = ttk.Entry(frame, textvariable=self.qty_var, width=10)
+
+        self.qty_entry = ctk.CTkEntry(frame, textvariable=self.qty_var, width=100)
         self.qty_entry.grid(row=1, column=2, sticky="ew", padx=(0, 8), pady=4)
-        self.vat_entry = ttk.Entry(frame, textvariable=self.vat_var, width=8)
+
+        self.vat_entry = ctk.CTkEntry(frame, textvariable=self.vat_var, width=80)
         self.vat_entry.grid(row=1, column=3, sticky="ew", padx=(0, 8), pady=4)
+
+        ctk.CTkButton(frame, text="➕ Aggiungi alla lista", command=self.add_item).grid(row=1, column=4, padx=(6, 0), pady=4)
 
         self.price_entry.bind("<Return>", lambda e: self.add_item())
         self.qty_entry.bind("<Return>", lambda e: self.add_item())
         self.vat_entry.bind("<Return>", lambda e: self.add_item())
 
-
-        ttk.Button(frame, text="➕ Aggiungi alla lista", command=self.add_item).grid(row=1, column=4, padx=(6, 0), pady=4)
-
         frame.columnconfigure(0, weight=1)
+
 
 
     def _update_woo_autocomplete(self):
         if not hasattr(self, 'desc_entry'):
             return
         self.woo_name_map = {p["name"].strip(): p for p in self.woo_products if p.get("name") and p["name"].strip()}
-
     def _build_table(self) -> None:
-        frame = ttk.LabelFrame(self.root, text="Articoli Inseriti", padding=10)
+        frame_container = ctk.CTkFrame(self.root)
+        frame_container.pack(fill="both", expand=True, padx=12, pady=8)
+
+        ctk.CTkLabel(frame_container, text="Articoli Inseriti", font=ctk.CTkFont(family="Helvetica", size=14, weight="bold")).pack(anchor="w", padx=12, pady=(8,0))
+
+        frame = ctk.CTkFrame(frame_container, fg_color="transparent")
         # expand=True permette alla tabella di occupare lo spazio rimanente, ma non spingerà fuori i bottoni già pacchettizzati
-        frame.pack(fill="both", expand=True, padx=12, pady=8)
+        frame.pack(fill="both", expand=True, padx=12, pady=(0, 12))
 
         columns = ("name", "unit_price", "quantity", "total", "vat", "total_with_vat")
         self.tree = ttk.Treeview(frame, columns=columns, show="headings", height=8)
@@ -627,7 +647,6 @@ class PreventivoApp:
         yscroll.pack(side="right", fill="y")
 
         self.tree.bind("<Double-1>", self._on_double_click_edit)
-
 
     def _on_double_click_edit(self, event) -> None:
         row_id = self.tree.identify_row(event.y)
@@ -707,34 +726,33 @@ class PreventivoApp:
     def _build_buttons(self) -> None:
         # Questo frame è pacchettizzato BOTTOM, quindi starà sempre in fondo.
         # fill="x" lo fa occupare tutto lo spazio orizzontale
-        frame = ttk.Frame(self.root, padding=12)
-        frame.pack(side="bottom", fill="x")
+        frame = ctk.CTkFrame(self.root, fg_color="transparent")
+        frame.pack(side="bottom", fill="x", padx=12, pady=12)
 
         # Sezione di sinistra: Riepilogo e pulsanti tabella
-        left_frame = ttk.Frame(frame)
+        left_frame = ctk.CTkFrame(frame, fg_color="transparent")
         left_frame.pack(side="left")
         
         self.summary_var = tk.StringVar(value="Totale Generale: € 0,00")
-        ttk.Label(left_frame, textvariable=self.summary_var, font=("Helvetica", 11, "bold")).pack(side="left", padx=(0, 15))
+        ctk.CTkLabel(left_frame, textvariable=self.summary_var, font=ctk.CTkFont(family="Helvetica", size=14, weight="bold")).pack(side="left", padx=(0, 15))
         
 
-        ttk.Button(left_frame, text="❌ Rimuovi", command=self.remove_selected).pack(side="left", padx=4)
+        ctk.CTkButton(left_frame, text="❌ Rimuovi", command=self.remove_selected, width=100, fg_color="#d32f2f", hover_color="#b71c1c").pack(side="left", padx=4)
 
         # Sezione di destra: Azioni progetto
-        right_frame = ttk.Frame(frame)
+        right_frame = ctk.CTkFrame(frame, fg_color="transparent")
         right_frame.pack(side="right")
 
-        ttk.Button(right_frame, text="🆕 Svuota Tutto", command=self.new_project).pack(side="left", padx=4)
-        ttk.Button(right_frame, text="🗄️ Archivio", command=self.show_archive_window).pack(side="left", padx=4)
-        ttk.Button(right_frame, text="💾 Esporta", command=self.save_project).pack(side="left", padx=4)
-        ttk.Button(right_frame, text="📂 Importa", command=self.load_project).pack(side="left", padx=4)
-        ttk.Button(right_frame, text="👁️ Anteprima", command=self.preview_pdf).pack(side="left", padx=4)
-        ttk.Button(right_frame, text="📄 GENERA PDF", command=self.generate_pdf, style="Accent.TButton").pack(side="left", padx=(15, 0))
-
+        ctk.CTkButton(right_frame, text="🆕 Svuota Tutto", command=self.new_project, width=120).pack(side="left", padx=4)
+        ctk.CTkButton(right_frame, text="🗄️ Archivio", command=self.show_archive_window, width=100).pack(side="left", padx=4)
+        ctk.CTkButton(right_frame, text="💾 Esporta", command=self.save_project, width=100).pack(side="left", padx=4)
+        ctk.CTkButton(right_frame, text="📂 Importa", command=self.load_project, width=100).pack(side="left", padx=4)
+        ctk.CTkButton(right_frame, text="👁️ Anteprima", command=self.preview_pdf, width=110).pack(side="left", padx=4)
+        ctk.CTkButton(right_frame, text="📄 GENERA PDF", command=self.generate_pdf, fg_color="#388e3c", hover_color="#2e7d32", width=140).pack(side="left", padx=(15, 0))
 
     def _refresh_customer_combo(self):
         customers = storage.load_customers()
-        self.customer_combo['values'] = sorted(list(customers.keys()))
+        self.customer_combo.configure(values=sorted(list(customers.keys())))
 
     def _on_customer_selected(self, event=None):
         selected = self.customer_name_var.get()
@@ -861,7 +879,7 @@ class PreventivoApp:
 
 
     def show_archive_window(self):
-        archive_win = tk.Toplevel(self.root)
+        archive_win = ctk.CTkToplevel(self.root)
         archive_win.title("Archivio Preventivi Locali")
         archive_win.geometry("600x400")
         archive_win.transient(self.root)
@@ -891,7 +909,7 @@ class PreventivoApp:
 
         tree.bind("<Double-1>", on_double_click)
 
-        ttk.Label(archive_win, text="Doppio clic su un preventivo per caricarlo.").pack(pady=(0,10))
+        ctk.CTkLabel(archive_win, text="Doppio clic su un preventivo per caricarlo.").pack(pady=(0,10))
 
     def _load_from_filepath(self, filepath: str):
         payload = storage.load_local_quote(filepath)
@@ -1046,10 +1064,33 @@ class PreventivoApp:
             messagebox.showerror("Errore PDF", str(exc))
 
 def main() -> None:
-    root = tk.Tk()
+    ctk.set_appearance_mode("System")
+    ctk.set_default_color_theme("blue")
+    root = ctk.CTk()
+
+    # Configure ttk style for Treeview to match CustomTkinter
     style = ttk.Style(root)
-    if "vista" in style.theme_names():
-        style.theme_use("vista")
+    style.theme_use("default")
+
+    bg_color = root._apply_appearance_mode(ctk.ThemeManager.theme["CTkFrame"]["fg_color"])
+    text_color = root._apply_appearance_mode(ctk.ThemeManager.theme["CTkLabel"]["text_color"])
+    selected_color = root._apply_appearance_mode(ctk.ThemeManager.theme["CTkButton"]["fg_color"])
+
+    style.configure("Treeview",
+                    background=bg_color,
+                    foreground=text_color,
+                    rowheight=25,
+                    fieldbackground=bg_color,
+                    borderwidth=0)
+    style.map('Treeview', background=[('selected', selected_color)])
+    style.configure("Treeview.Heading",
+                    background=bg_color,
+                    foreground=text_color,
+                    relief="flat",
+                    font=("Helvetica", 10, "bold"))
+    style.map("Treeview.Heading",
+              background=[('active', selected_color)])
+
     app = PreventivoApp(root)
     root.mainloop()
 
