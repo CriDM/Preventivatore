@@ -12,6 +12,7 @@ import sys
 import platform
 import os
 import subprocess
+import tempfile
 
 from pdf_generator import generate_quote_pdf
 
@@ -247,7 +248,7 @@ class PreventivoApp:
     def open_settings_dialog(self, first_run=False) -> None:
         dialog = tk.Toplevel(self.root)
         dialog.title("Setup Dati Azienda" if first_run else "Impostazioni Azienda")
-        dialog.geometry("550x650")
+        dialog.geometry("800x650")
         dialog.transient(self.root)
         dialog.grab_set()
 
@@ -727,6 +728,7 @@ class PreventivoApp:
         ttk.Button(right_frame, text="🗄️ Archivio", command=self.show_archive_window).pack(side="left", padx=4)
         ttk.Button(right_frame, text="💾 Esporta", command=self.save_project).pack(side="left", padx=4)
         ttk.Button(right_frame, text="📂 Importa", command=self.load_project).pack(side="left", padx=4)
+        ttk.Button(right_frame, text="👁️ Anteprima", command=self.preview_pdf).pack(side="left", padx=4)
         ttk.Button(right_frame, text="📄 GENERA PDF", command=self.generate_pdf, style="Accent.TButton").pack(side="left", padx=(15, 0))
 
 
@@ -949,25 +951,9 @@ class PreventivoApp:
             self._insert_tree_row(i)
         self._refresh_summary()
 
-    def generate_pdf(self) -> None:
-        if not self.items:
-            messagebox.showwarning("Errore", "Aggiungi articoli prima di generare il PDF.")
-            return
 
-        # Salva o aggiorna in anagrafica
-        storage.save_customer(
-            self.customer_name_var.get(),
-            self.customer_address_var.get(),
-            self.contact_person_var.get()
-        )
-        self._refresh_customer_combo()
-
-        out_name = f"Preventivo_{self.quote_number_var.get()}_{self.customer_name_var.get().replace(' ','_')}.pdf"
-        file_path = filedialog.asksaveasfilename(defaultextension=".pdf", initialfile=out_name, filetypes=[("PDF", "*.pdf")])
-        if not file_path: return
-
-        # Unisci i dati fissi (dalle settings) e quelli del cliente (dalla UI)
-        doc_data = {
+    def _get_doc_data(self) -> dict:
+        return {
             "company_name": self.settings.get("company_name", ""),
             "company_address": self.settings.get("company_address", ""),
             "piva": self.settings.get("piva", ""),
@@ -984,8 +970,49 @@ class PreventivoApp:
             "final_notes": self.final_notes_var.get(),
         }
 
+    def preview_pdf(self) -> None:
+        if not self.items:
+            messagebox.showwarning("Errore", "Aggiungi articoli prima di generare l'anteprima del PDF.")
+            return
+
+
         try:
-            generate_quote_pdf(self.items, doc_data, file_path)
+            fd, temp_path = tempfile.mkstemp(suffix=".pdf")
+            os.close(fd)
+            generate_quote_pdf(self.items, self._get_doc_data(), temp_path)
+
+            try:
+                if platform.system() == "Windows":
+                    os.startfile(temp_path)
+                elif platform.system() == "Darwin":
+                    subprocess.call(["open", temp_path])
+                else:
+                    subprocess.call(["xdg-open", temp_path])
+            except Exception as e:
+                messagebox.showerror("Errore Apertura PDF", f"Impossibile aprire il file PDF.\nErrore: {str(e)}")
+        except Exception as exc:
+            messagebox.showerror("Errore Anteprima", str(exc))
+
+    def generate_pdf(self) -> None:
+
+        if not self.items:
+            messagebox.showwarning("Errore", "Aggiungi articoli prima di generare il PDF.")
+            return
+
+        # Salva o aggiorna in anagrafica
+        storage.save_customer(
+            self.customer_name_var.get(),
+            self.customer_address_var.get(),
+            self.contact_person_var.get()
+        )
+        self._refresh_customer_combo()
+
+        out_name = f"Preventivo_{self.quote_number_var.get()}_{self.customer_name_var.get().replace(' ','_')}.pdf"
+        file_path = filedialog.asksaveasfilename(defaultextension=".pdf", initialfile=out_name, filetypes=[("PDF", "*.pdf")])
+        if not file_path: return
+
+        try:
+            generate_quote_pdf(self.items, self._get_doc_data(), file_path)
 
             # Salva una copia nel database locale
             payload = {
