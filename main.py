@@ -1,3 +1,4 @@
+__version__ = "1.0.1"
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import json
 import threading
@@ -10,6 +11,11 @@ from tkinter import filedialog, messagebox, ttk
 from datetime import date
 import datetime
 import sys
+
+import urllib.request
+from packaging import version
+import shutil
+
 import platform
 import os
 import subprocess
@@ -74,6 +80,7 @@ class PreventivoApp:
             self.root.after(500, lambda: self.open_settings_dialog(first_run=True))
 
         self.root.after(100, self._check_and_load_draft)
+        self.root.after(2000, self._check_and_prompt_update)
 
     def _save_draft(self, *args) -> None:
         if getattr(self, "_loading_draft", False):
@@ -103,6 +110,117 @@ class PreventivoApp:
                 draft_file.unlink()
             except Exception:
                 pass
+
+
+    def _check_and_prompt_update(self):
+        def run_check():
+            try:
+                url = f"https://api.github.com/repos/CriDM/preventivatore/releases/latest"
+                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req, timeout=5) as response:
+                    data = json.loads(response.read())
+
+                latest_version = data['tag_name'].lstrip('v')
+
+                if version.parse(latest_version) > version.parse(__version__):
+                    assets = data.get('assets', [])
+                    download_url = None
+
+                    system = platform.system()
+                    if system == "Windows":
+                        for asset in assets:
+                            if asset['name'].endswith('.exe'):
+                                download_url = asset['browser_download_url']
+                                break
+                    elif system == "Darwin":
+                        for asset in assets:
+                            if asset['name'].endswith('.app.zip') or asset['name'].endswith('.dmg') or 'mac' in asset['name'].lower():
+                                download_url = asset['browser_download_url']
+                                break
+
+                    if download_url:
+                        self.root.after(0, self._show_update_dialog, latest_version, download_url)
+            except Exception as e:
+                print(f"Aggiornamento automatico fallito: {e}")
+
+        threading.Thread(target=run_check, daemon=True).start()
+
+    def _show_update_dialog(self, new_version, download_url):
+        res = messagebox.askyesno(
+            "Aggiornamento Disponibile",
+            f"È disponibile la nuova versione {new_version}!\nVuoi scaricarla e installarla ora?",
+            parent=self.root
+        )
+        if res:
+            progress_win = tk.Toplevel(self.root)
+            progress_win.title("Download in corso...")
+            progress_win.geometry("300x120")
+            progress_win.resizable(False, False)
+            progress_win.transient(self.root)
+            progress_win.grab_set()
+
+            # Center
+            progress_win.update_idletasks()
+            x = self.root.winfo_x() + (self.root.winfo_width() // 2) - (300 // 2)
+            y = self.root.winfo_y() + (self.root.winfo_height() // 2) - (120 // 2)
+            progress_win.geometry(f"+{x}+{y}")
+
+            tk.Label(progress_win, text=f"Scaricamento della versione {new_version}...").pack(pady=(15, 5))
+
+            progress = ttk.Progressbar(progress_win, mode='indeterminate')
+            progress.pack(fill=tk.X, padx=20, pady=10)
+            progress.start()
+
+            threading.Thread(target=self._download_and_install, args=(download_url, progress_win), daemon=True).start()
+
+    def _download_and_install(self, url, progress_win):
+        try:
+            fd, temp_path = tempfile.mkstemp()
+            os.close(fd)
+
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req) as response, open(temp_path, 'wb') as out_file:
+                shutil.copyfileobj(response, out_file)
+
+            progress_win.after(0, progress_win.destroy)
+
+            system = platform.system()
+            if system == "Windows":
+                current_exe = sys.executable
+                if not current_exe.endswith('.exe') or 'python' in os.path.basename(current_exe).lower():
+                    self.root.after(0, messagebox.showinfo, "Download completato",
+                               f"Aggiornamento scaricato in:\n{temp_path}\nSostituiscilo manualmente.",
+                               parent=self.root)
+                    return
+
+                batch_script = f"""@echo off
+echo Attendere l'aggiornamento di Preventivatore...
+timeout /t 2 /nobreak > NUL
+move /Y "{temp_path}" "{current_exe}"
+start "" "{current_exe}"
+del "%~f0"
+"""
+                fd_bat, bat_path = tempfile.mkstemp(suffix=".bat")
+                with os.fdopen(fd_bat, 'w') as f:
+                    f.write(batch_script)
+
+                flags = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+                subprocess.Popen([bat_path], shell=True, creationflags=flags)
+                self.root.after(0, self.root.destroy)
+
+            elif system == "Darwin":
+                subprocess.Popen(['open', temp_path])
+                self.root.after(0, messagebox.showinfo, "Aggiornamento scaricato",
+                           "L'aggiornamento è stato scaricato. Segui le istruzioni a schermo per completare l'installazione.",
+                           parent=self.root)
+            else:
+                self.root.after(0, messagebox.showinfo, "Download completato",
+                           f"Aggiornamento scaricato in:\n{temp_path}\nInstallalo manualmente.",
+                           parent=self.root)
+
+        except Exception as e:
+            progress_win.after(0, progress_win.destroy)
+            self.root.after(0, messagebox.showerror, "Errore", f"Impossibile installare l'aggiornamento: {e}", parent=self.root)
 
     def _check_and_load_draft(self) -> None:
         draft_file = self.settings_dir / "draft.pquote"
